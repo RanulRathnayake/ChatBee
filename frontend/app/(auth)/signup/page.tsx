@@ -1,0 +1,19 @@
+"use client";
+
+import SignupForm from "@/components/auth/SignupForm";
+
+export default function SignupPage() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-950 via-slate-900 to-sky-900">
+      <div className="w-full max-w-md rounded-2xl bg-slate-950/70 border border-slate-800 shadow-2xl shadow-sky-900/40 p-8 backdrop-blur">
+        <h1 className="text-2xl font-semibold text-slate-50 mb-2">
+          Create your account 
+        </h1>
+        <p className="text-sm text-slate-400 mb-6">
+          Just a few details and you&apos;re in.
+        </p>
+        <SignupForm />
+      </div>
+    </div>
+  );
+}
