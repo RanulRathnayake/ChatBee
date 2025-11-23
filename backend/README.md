@@ -1,8 +1,13 @@
 
 # Chat app Backend — Nest.js + Prisma + PostgreSQL
 
-#Technologies Used
+# ERD Diagram
 
+Here is a ERD Diagram of the chat application database:
+
+![Chat App Diagram](assets/Blank diagram.png)
+
+# Technologies Used
 Nest.js – Backend framework
 
 Prisma ORM – Database access
