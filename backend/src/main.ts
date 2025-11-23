@@ -7,7 +7,7 @@ async function bootstrap() {
   app.enableCors({
     origin: [
       'http://localhost:3000',
-      'https://chat-bee-one.vercel.app/login'    
+      'https://chat-bee-one.vercel.app'    
     ],
     credentials: true,
   });
