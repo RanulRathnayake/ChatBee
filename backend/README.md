@@ -3,9 +3,9 @@
 
 # ERD Diagram
 
-Here is a ERD Diagram of the chat application database:
+Here is the ERD Diagram of the chat application database:
 
-![Chat App Diagram](assets/Blank diagram.png)
+![Chat App Diagram]([assets/Blank diagram.png](https://github.com/RanulRathnayake/ChatBee/blob/fa806f60b79875636092c75c4bb7fb30da1e7c9e/assets/Blank%20diagram.png))
 
 # Technologies Used
 Nest.js – Backend framework
