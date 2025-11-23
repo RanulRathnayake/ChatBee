@@ -5,10 +5,14 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { ChatGateway } from './chat.gateway'; 
 
 @Injectable()
 export class ChatService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private gateway: ChatGateway,       
+  ) {}
 
   async createDirectConversation(currentUserId: string, otherUserId: string) {
     if (currentUserId === otherUserId) {
@@ -79,7 +83,7 @@ export class ChatService {
       include: {
         participants: { include: { user: true } },
         messages: {
-          orderBy: { createdAt: 'desc' }, 
+          orderBy: { createdAt: 'desc' },
           take: 1,
         },
       },
@@ -115,7 +119,7 @@ export class ChatService {
   async sendMessage(userId: string, conversationId: string, content: string) {
     await this.ensureParticipant(userId, conversationId);
 
-    return this.prisma.message.create({
+    const message = await this.prisma.message.create({
       data: {
         senderId: userId,
         conversationId,
@@ -125,6 +129,21 @@ export class ChatService {
         sender: { select: { id: true, username: true } },
       },
     });
+
+    const payload = {
+      id: message.id,
+      content: message.content,
+      createdAt: message.createdAt,
+      conversationId: message.conversationId,
+      sender: {
+        id: message.sender.id,
+        username: message.sender.username,
+      },
+    };
+
+    this.gateway.broadcastMessage(payload);
+
+    return payload;
   }
 
   async editMessage(userId: string, messageId: string, content: string) {
@@ -145,13 +164,28 @@ export class ChatService {
     }
     await this.ensureParticipant(userId, message.conversationId);
 
-    return this.prisma.message.update({
+    const updated = await this.prisma.message.update({
       where: { id: messageId },
       data: { content },
       include: {
         sender: { select: { id: true, username: true } },
       },
     });
+
+    const payload = {
+      id: updated.id,
+      content: updated.content,
+      createdAt: updated.createdAt,
+      conversationId: updated.conversationId,
+      sender: {
+        id: updated.sender.id,
+        username: updated.sender.username,
+      },
+    };
+
+    this.gateway.broadcastEditMessage(payload); 
+
+    return payload;
   }
 
   async deleteMessage(userId: string, messageId: string) {
@@ -167,11 +201,18 @@ export class ChatService {
       throw new ForbiddenException('You can only delete your own messages');
     }
     await this.ensureParticipant(userId, message.conversationId);
-    return this.prisma.message.delete({
+
+    await this.prisma.message.delete({
       where: { id: messageId },
     });
-  }
 
+    this.gateway.broadcastDeleteMessage({
+      id: messageId,
+      conversationId: message.conversationId,
+    });
+
+    return { success: true };
+  }
 
   async addUsersToGroup(currentUserId: string, convoId: string, participantIds: string[]) {
     const convo = await this.prisma.conversation.findUnique({
@@ -222,6 +263,7 @@ export class ChatService {
     if (!isMember) {
       throw new ForbiddenException('You are not a participant of this conversation');
     }
+
     await this.prisma.conversationParticipant.deleteMany({
       where: {
         userId,
@@ -231,7 +273,6 @@ export class ChatService {
 
     return { success: true };
   }
-
 
   async searchConversationsByName(userId: string, query: string) {
     const term = query?.trim();
@@ -255,7 +296,7 @@ export class ChatService {
         },
         messages: {
           orderBy: { createdAt: 'desc' },
-          take: 1, 
+          take: 1,
         },
       },
       orderBy: {

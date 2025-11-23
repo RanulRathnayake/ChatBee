@@ -1,10 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import type { Conversation, Message } from "@/lib/types";
-import useSWR from "swr";
-import { useSWRConfig } from "swr";
+import useSWR, { useSWRConfig } from "swr";
 import { api } from "@/lib/apiClient";
 import { Spinner } from "@/components/ui/Spinner";
 import MessageBubble from "./MessageBubble";
@@ -21,12 +19,10 @@ const fetcher = (url: string) => api.get(url).then((res) => res.data);
 
 const ChatWindow = ({ conversation, onLeave }: Props) => {
   const { user } = useAuth();
-  const { mutate } = useSWRConfig(); 
-  const router = useRouter();  
+  const { mutate } = useSWRConfig();
   const [messages, setMessages] = useState<Message[]>([]);
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
-  
   const [editingMessage, setEditingMessage] = useState<Message | null>(null);
   const [editContent, setEditContent] = useState("");
   const [leaving, setLeaving] = useState(false);
@@ -49,16 +45,41 @@ const ChatWindow = ({ conversation, onLeave }: Props) => {
   useEffect(() => {
     const socket = getSocket();
 
+       socket.emit("joinConversation", {
+      conversationId: conversation.id,
+    });
+
     const onNewMessage = (msg: Message) => {
-      if (msg.conversationId === conversation.id) {
-        setMessages((prev) => [...prev, msg]);
-      }
+      if (msg.conversationId !== conversation.id) return;
+
+      setMessages((prev) => {
+        if (prev.some((m) => m.id === msg.id)) return prev;
+        return [...prev, msg];
+      });
+    };
+
+    const onEditMessage = (msg: Message) => {
+      if (msg.conversationId !== conversation.id) return;
+
+      setMessages((prev) =>
+        prev.map((m) => (m.id === msg.id ? msg : m))
+      );
+    };
+
+    const onDeleteMessage = (payload: { id: string; conversationId: string }) => {
+      if (payload.conversationId !== conversation.id) return;
+
+      setMessages((prev) => prev.filter((m) => m.id !== payload.id));
     };
 
     socket.on("message", onNewMessage);
+    socket.on("editMessage", onEditMessage);
+    socket.on("deleteMessage", onDeleteMessage);
 
     return () => {
       socket.off("message", onNewMessage);
+      socket.off("editMessage", onEditMessage);
+      socket.off("deleteMessage", onDeleteMessage);
     };
   }, [conversation.id]);
 
@@ -88,12 +109,10 @@ const ChatWindow = ({ conversation, onLeave }: Props) => {
       });
 
       const saved: Message = res.data;
+
       setMessages((prev) =>
         prev.map((m) => (m.id === optimistic.id ? saved : m))
       );
-
-      const socket = getSocket();
-      socket.emit("sendMessage", saved);
     } catch (e) {
       setMessages((prev) => prev.filter((m) => m.id !== optimistic.id));
     }
@@ -119,9 +138,11 @@ const ChatWindow = ({ conversation, onLeave }: Props) => {
 
   const startEdit = (msg: Message) => {
     if (msg.sender.id !== user?.id) return;
+
     setEditingMessage(msg);
     setEditContent(msg.content);
   };
+
   const saveEdit = async () => {
     if (!editingMessage) return;
     const trimmed = editContent.trim();
@@ -138,9 +159,6 @@ const ChatWindow = ({ conversation, onLeave }: Props) => {
         prev.map((m) => (m.id === updated.id ? updated : m))
       );
 
-      const socket = getSocket();
-      socket.emit("editMessage", updated);
-
       setEditingMessage(null);
       setEditContent("");
     } catch (e) {
@@ -149,15 +167,12 @@ const ChatWindow = ({ conversation, onLeave }: Props) => {
   };
 
   const deleteMessage = async (msg: Message) => {
-    if (msg.sender.id !== user?.id) return; 
+    if (msg.sender.id !== user?.id) return;
 
     try {
       await api.delete(`/chat/messages/${msg.id}`);
 
       setMessages((prev) => prev.filter((m) => m.id !== msg.id));
-
-      const socket = getSocket();
-      socket.emit("deleteMessage", { id: msg.id, conversationId: msg.conversationId });
     } catch (e) {
       console.error("Failed to delete message", e);
     }
@@ -171,6 +186,7 @@ const ChatWindow = ({ conversation, onLeave }: Props) => {
       await api.post(`/chat/conversations/${conversation.id}/leave`);
 
       mutate("/chat/conversations");
+
       if (onLeave) {
         onLeave(conversation.id);
       }
@@ -185,21 +201,21 @@ const ChatWindow = ({ conversation, onLeave }: Props) => {
     <div className="h-screen flex flex-col bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
       <header className="px-6 py-4 border-b border-slate-800 flex items-center justify-between">
         <div>
-          
           <h2 className="text-lg font-semibold text-slate-50">
             {headerTitle}
           </h2>
         </div>
+
         {conversation.isGroup && (
-    <button
-      type="button"
-      onClick={handleLeaveGroup}
-      disabled={leaving}
-      className="text-xs px-3 py-1 rounded-full border border-rose-500/40 bg-rose-500/10 text-rose-300 hover:bg-rose-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
-    >
-      {leaving ? "Leaving..." : "Leave group"}
-    </button>
-  )}
+          <button
+            type="button"
+            onClick={handleLeaveGroup}
+            disabled={leaving}
+            className="text-xs px-3 py-1 rounded-full border border-rose-500/40 bg-rose-500/10 text-rose-300 hover:bg-rose-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {leaving ? "Leaving..." : "Leave group"}
+          </button>
+        )}
       </header>
 
       <main className="flex-1 overflow-y-auto px-4 sm:px-8 py-4 space-y-2">
@@ -208,6 +224,7 @@ const ChatWindow = ({ conversation, onLeave }: Props) => {
             <Spinner />
           </div>
         )}
+
         {!isLoading &&
           messages.map((m) => (
             <MessageBubble
@@ -218,12 +235,14 @@ const ChatWindow = ({ conversation, onLeave }: Props) => {
               onDelete={deleteMessage}
             />
           ))}
+
         <div ref={bottomRef} />
       </main>
 
       <footer className="border-t border-slate-800 px-4 sm:px-8 py-3">
         <MessageInput onSend={handleSend} />
       </footer>
+
       {editingMessage && (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/50 backdrop-blur-sm">
           <div className="w-full max-w-md rounded-2xl bg-slate-950 border border-slate-800 p-6 shadow-2xl">
